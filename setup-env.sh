@@ -1,6 +1,5 @@
 #!/bin/bash
-set -e  # Exit immediately on error
-
+# set -e  # Exit immediately on error
 PROJECT_DIR="/home/ubuntu/python-mysql-db-proj-1"
 cd "$PROJECT_DIR"
 
