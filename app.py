@@ -16,24 +16,6 @@ def get_db_connection():
 def health():
     return 'OK', 200
 
-@app.route('/create_table')
-def create_table():
-    try:
-        connection = get_db_connection()
-        cursor = connection.cursor()
-        create_table_query = """
-            CREATE TABLE IF NOT EXISTS example_table (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                name VARCHAR(255) NOT NULL
-            )
-        """
-        cursor.execute(create_table_query)
-        connection.commit()
-        connection.close()
-        return "Table created successfully", 200
-
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/create_table')
 def create_table():
