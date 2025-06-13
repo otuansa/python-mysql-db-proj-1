@@ -1,119 +1,113 @@
-from flask import Flask, jsonify, render_template, request
-import pymysql
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Example Table Manager</title>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        input, button { margin: 5px; padding: 8px; }
+        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+        th, td { border: 1px solid #ccc; padding: 10px; text-align: left; }
+    </style>
+</head>
+<body>
 
-app = Flask(__name__)
+    <h1>Manage Records</h1>
 
-def get_db_connection():
-    connection = pymysql.connect(
-        host='mydb.cpuawiicm5t3.eu-central-1.rds.amazonaws.com',  # Replace with your RDS endpoint
-        user='dbuser',  # Replace with your RDS username
-        password='dbpassword',  # Replace with your RDS password
-        db='devprojdb',  # Replace with your database name
-        charset='utf8mb4',
-        cursorclass=pymysql.cursors.DictCursor
-    )
-    return connection
+    <h2>Add New Record</h2>
+    <input type="text" id="name" placeholder="Name">
+    <input type="email" id="email" placeholder="Email">
+    <input type="text" id="status" placeholder="Status">
+    <button onclick="addRecord()">Add</button>
 
-@app.route('/health')
-def health():
-    return 'OK', 200
+    <h2>Update Record</h2>
+    <input type="number" id="updateId" placeholder="ID">
+    <input type="text" id="updateName" placeholder="New Name">
+    <input type="email" id="updateEmail" placeholder="New Email">
+    <input type="text" id="updateStatus" placeholder="New Status">
+    <button onclick="updateRecord()">Update</button>
 
-@app.route('/create_table')
-def create_table():
-    try:
-        connection = get_db_connection()
-        cursor = connection.cursor()
-        create_table_query = """
-            CREATE TABLE IF NOT EXISTS example_table (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                name VARCHAR(255) NOT NULL
-            )
-        """
-        cursor.execute(create_table_query)
-        connection.commit()
-        return "Table created successfully", 201
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-    finally:
-        connection.close()
+    <h2>Delete Record</h2>
+    <input type="number" id="deleteId" placeholder="ID">
+    <button onclick="deleteRecord()">Delete</button>
 
-@app.route('/insert_record', methods=['POST'])
-def insert_record():
-    try:
-        data = request.get_json()
-        if not data or 'name' not in data:
-            return jsonify({'error': 'Missing "name" in request body'}), 400
+    <h2>All Records</h2>
+    <button onclick="loadData()">Refresh</button>
+    <table id="dataTable">
+        <thead>
+            <tr>
+                <th>ID</th><th>Name</th><th>Email</th><th>Status</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
 
-        name = data['name']
-        connection = get_db_connection()
-        cursor = connection.cursor()
-        insert_query = "INSERT INTO example_table (name) VALUES (%s)"
-        cursor.execute(insert_query, (name,))
-        connection.commit()
-        return jsonify({'message': 'Record inserted successfully', 'id': cursor.lastrowid}), 201
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-    finally:
-        connection.close()
+    <script>
+        function addRecord() {
+            const name = document.getElementById("name").value;
+            const email = document.getElementById("email").value;
+            const status = document.getElementById("status").value;
 
-@app.route('/data')
-def data():
-    try:
-        connection = get_db_connection()
-        cursor = connection.cursor()
-        cursor.execute('SELECT * FROM example_table')
-        result = cursor.fetchall()
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-    finally:
-        connection.close()
+            fetch("/insert_record", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name, email, status })
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message || data.error);
+                loadData();
+            });
+        }
 
-@app.route('/update_record/<int:id>', methods=['PUT'])
-def update_record(id):
-    try:
-        data = request.get_json()
-        if not data or 'name' not in data:
-            return jsonify({'error': 'Missing "name" in request body'}), 400
+        function updateRecord() {
+            const id = document.getElementById("updateId").value;
+            const name = document.getElementById("updateName").value;
+            const email = document.getElementById("updateEmail").value;
+            const status = document.getElementById("updateStatus").value;
 
-        name = data['name']
-        connection = get_db_connection()
-        cursor = connection.cursor()
-        update_query = "UPDATE example_table SET name = %s WHERE id = %s"
-        cursor.execute(update_query, (name, id))
-        connection.commit()
+            fetch(`/update_record/${id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name, email, status })
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message || data.error);
+                loadData();
+            });
+        }
 
-        if cursor.rowcount == 0:
-            return jsonify({'error': f'Record with id {id} not found'}), 404
+        function deleteRecord() {
+            const id = document.getElementById("deleteId").value;
 
-        return jsonify({'message': f'Record {id} updated successfully'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-    finally:
-        connection.close()
+            fetch(`/delete_record/${id}`, {
+                method: "DELETE"
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message || data.error);
+                loadData();
+            });
+        }
 
-@app.route('/delete_record/<int:id>', methods=['DELETE'])
-def delete_record(id):
-    try:
-        connection = get_db_connection()
-        cursor = connection.cursor()
-        delete_query = "DELETE FROM example_table WHERE id = %s"
-        cursor.execute(delete_query, (id,))
-        connection.commit()
+        function loadData() {
+            fetch("/data")
+                .then(response => response.json())
+                .then(data => {
+                    const tbody = document.querySelector("#dataTable tbody");
+                    tbody.innerHTML = "";
+                    data.forEach(row => {
+                        const tr = document.createElement("tr");
+                        tr.innerHTML = `<td>${row.id}</td><td>${row.name}</td><td>${row.email || ""}</td><td>${row.status || ""}</td>`;
+                        tbody.appendChild(tr);
+                    });
+                });
+        }
 
-        if cursor.rowcount == 0:
-            return jsonify({'error': f'Record with id {id} not found'}), 404
+        // Initial load
+        window.onload = loadData;
+    </script>
 
-        return jsonify({'message': f'Record {id} deleted successfully'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-    finally:
-        connection.close()
-
-# UI route
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+</body>
+</html>
