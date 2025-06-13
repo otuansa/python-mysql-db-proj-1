@@ -1,113 +1,141 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Example Table Manager</title>
-    <meta charset="UTF-8">
-    <style>
-        body { font-family: Arial, sans-serif; padding: 20px; }
-        input, button { margin: 5px; padding: 8px; }
-        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-        th, td { border: 1px solid #ccc; padding: 10px; text-align: left; }
-    </style>
-</head>
-<body>
+from flask import Flask, jsonify, render_template, request
+import pymysql
 
-    <h1>Manage Records</h1>
+app = Flask(__name__)
 
-    <h2>Add New Record</h2>
-    <input type="text" id="name" placeholder="Name">
-    <input type="email" id="email" placeholder="Email">
-    <input type="text" id="status" placeholder="Status">
-    <button onclick="addRecord()">Add</button>
+def get_db_connection():
+    connection = pymysql.connect(
+        host='mydb.cpuawiicm5t3.eu-central-1.rds.amazonaws.com',
+        user='dbuser',
+        password='dbpassword',
+        db='devprojdb',
+        charset='utf8mb4',
+        cursorclass=pymysql.cursors.DictCursor
+    )
+    return connection
 
-    <h2>Update Record</h2>
-    <input type="number" id="updateId" placeholder="ID">
-    <input type="text" id="updateName" placeholder="New Name">
-    <input type="email" id="updateEmail" placeholder="New Email">
-    <input type="text" id="updateStatus" placeholder="New Status">
-    <button onclick="updateRecord()">Update</button>
+@app.route('/health')
+def health():
+    return 'OK', 200
 
-    <h2>Delete Record</h2>
-    <input type="number" id="deleteId" placeholder="ID">
-    <button onclick="deleteRecord()">Delete</button>
+@app.route('/create_table')
+def create_table():
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        create_table_query = """
+            CREATE TABLE IF NOT EXISTS example_table (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                email VARCHAR(255),
+                status VARCHAR(50)
+            )
+        """
+        cursor.execute(create_table_query)
+        connection.commit()
+        return "Table created successfully", 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        connection.close()
 
-    <h2>All Records</h2>
-    <button onclick="loadData()">Refresh</button>
-    <table id="dataTable">
-        <thead>
-            <tr>
-                <th>ID</th><th>Name</th><th>Email</th><th>Status</th>
-            </tr>
-        </thead>
-        <tbody></tbody>
-    </table>
+@app.route('/insert_record', methods=['POST'])
+def insert_record():
+    try:
+        data = request.get_json()
+        name = data.get('name')
+        email = data.get('email')
+        status = data.get('status')
 
-    <script>
-        function addRecord() {
-            const name = document.getElementById("name").value;
-            const email = document.getElementById("email").value;
-            const status = document.getElementById("status").value;
+        if not name:
+            return jsonify({'error': 'Missing "name" in request body'}), 400
 
-            fetch("/insert_record", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, email, status })
-            })
-            .then(response => response.json())
-            .then(data => {
-                alert(data.message || data.error);
-                loadData();
-            });
-        }
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        insert_query = "INSERT INTO example_table (name, email, status) VALUES (%s, %s, %s)"
+        cursor.execute(insert_query, (name, email, status))
+        connection.commit()
+        return jsonify({'message': 'Record inserted successfully', 'id': cursor.lastrowid}), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        connection.close()
 
-        function updateRecord() {
-            const id = document.getElementById("updateId").value;
-            const name = document.getElementById("updateName").value;
-            const email = document.getElementById("updateEmail").value;
-            const status = document.getElementById("updateStatus").value;
+@app.route('/data')
+def data():
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        cursor.execute('SELECT * FROM example_table')
+        result = cursor.fetchall()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        connection.close()
 
-            fetch(`/update_record/${id}`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, email, status })
-            })
-            .then(response => response.json())
-            .then(data => {
-                alert(data.message || data.error);
-                loadData();
-            });
-        }
+@app.route('/update_record/<int:id>', methods=['PUT'])
+def update_record(id):
+    try:
+        data = request.get_json()
+        name = data.get('name')
+        email = data.get('email')
+        status = data.get('status')
 
-        function deleteRecord() {
-            const id = document.getElementById("deleteId").value;
+        if not name and not email and not status:
+            return jsonify({'error': 'No fields to update'}), 400
 
-            fetch(`/delete_record/${id}`, {
-                method: "DELETE"
-            })
-            .then(response => response.json())
-            .then(data => {
-                alert(data.message || data.error);
-                loadData();
-            });
-        }
+        updates = []
+        values = []
 
-        function loadData() {
-            fetch("/data")
-                .then(response => response.json())
-                .then(data => {
-                    const tbody = document.querySelector("#dataTable tbody");
-                    tbody.innerHTML = "";
-                    data.forEach(row => {
-                        const tr = document.createElement("tr");
-                        tr.innerHTML = `<td>${row.id}</td><td>${row.name}</td><td>${row.email || ""}</td><td>${row.status || ""}</td>`;
-                        tbody.appendChild(tr);
-                    });
-                });
-        }
+        if name:
+            updates.append("name = %s")
+            values.append(name)
+        if email:
+            updates.append("email = %s")
+            values.append(email)
+        if status:
+            updates.append("status = %s")
+            values.append(status)
 
-        // Initial load
-        window.onload = loadData;
-    </script>
+        values.append(id)
+        update_query = f"UPDATE example_table SET {', '.join(updates)} WHERE id = %s"
 
-</body>
-</html>
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        cursor.execute(update_query, tuple(values))
+        connection.commit()
+
+        if cursor.rowcount == 0:
+            return jsonify({'error': f'Record with id {id} not found'}), 404
+
+        return jsonify({'message': f'Record {id} updated successfully'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        connection.close()
+
+@app.route('/delete_record/<int:id>', methods=['DELETE'])
+def delete_record(id):
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        delete_query = "DELETE FROM example_table WHERE id = %s"
+        cursor.execute(delete_query, (id,))
+        connection.commit()
+
+        if cursor.rowcount == 0:
+            return jsonify({'error': f'Record with id {id} not found'}), 404
+
+        return jsonify({'message': f'Record {id} deleted successfully'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        connection.close()
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
