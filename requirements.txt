@@ -1,2 +1,4 @@
-Flask
-pymysql
+# python-mysql-db-proj-1/requirements.txt
+Flask==2.3.2 # Or your preferred version
+PyMySQL==1.0.2 # Or your preferred version
+gunicorn==21.2.0 # Or your preferred version
